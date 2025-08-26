@@ -5,7 +5,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="BOM Vergelijker", layout="wide")
 
-st.title("🗾 BOM Generator & Vergelijker")
+st.title("BOM Generator & Vergelijker")
 st.write("Upload een BOM CSV-bestand uit Teamcenter en een D365-exportbestand om verschillen te analyseren.")
 
 # Upload Teamcenter BOM-bestand
