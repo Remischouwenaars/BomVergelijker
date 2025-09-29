@@ -6,7 +6,7 @@ import re  # <-- voor het saneren van tabelnamen
 
 st.set_page_config(page_title="BOM Vergelijker", layout="wide")
 
-st.title("BOM Generator & Vergelijker")
+st.title("BOM Vergelijker")
 st.write("Upload een BOM CSV-bestand uit Teamcenter en een D365-exportbestand om verschillen te analyseren.")
 
 # Houd gebruikte tabelnamen bij om uniek te blijven (voor de zekerheid)
