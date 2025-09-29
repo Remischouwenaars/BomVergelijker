@@ -105,6 +105,7 @@ if uploaded_file is not None:
                 if type_ in ['buy', 'make']:
                     trace_log[child].append((total_qty, new_path + [(child, qty)]))
                     if is_length:
+                        # Bewaar lengte-items voor apart overzicht
                         length_log[child].append((total_qty, new_path + [(child, qty)]))
                     else:
                         final_results[child] += total_qty
@@ -114,6 +115,7 @@ if uploaded_file is not None:
         final_results = Counter()
         traverse(root_item, 1, [])
 
+        # Bestellijst (zonder lengte-artikelen, zoals voorheen)
         result_df = pd.DataFrame(final_results.items(), columns=['item', 'total_quantity'])
         result_df = result_df.merge(df[['item', 'productname']].drop_duplicates(), on='item', how='left')
         result_df = result_df.groupby(['item', 'productname'], as_index=False)['total_quantity'].sum()
@@ -137,18 +139,16 @@ if uploaded_file is not None:
                 path_str = " → ".join(parts)
                 st.code(path_str)
 
-        # 📏 Lengte-artikelen (afgeleid uit result_df + template)
-        length_join = (
-            result_df
-            .merge(
-                df[['item', 'template']].drop_duplicates(),
-                how='left',
-                on='item'
+        # 📏 Lengte-artikelen - juist afleiden uit length_log (niet uit result_df)
+        length_totals = [(itm, sum(q for q, _ in paths)) for itm, paths in length_log.items()]
+        length_df = pd.DataFrame(length_totals, columns=['item', 'total_quantity'])
+        if not length_df.empty:
+            length_df = length_df.merge(
+                df[['item', 'productname', 'template']].drop_duplicates(),
+                on='item', how='left'
             )
-        )
-        length_df = length_join[length_join['template'].astype(str).str.contains('mm', case=False, na=False)].copy()
-        cols = [c for c in ['item', 'productname', 'total_quantity', 'template'] if c in length_df.columns]
-        length_df = length_df[cols] if len(cols) == 4 else length_df
+            # kolomvolgorde
+            length_df = length_df[['item', 'productname', 'total_quantity', 'template']]
 
         st.subheader("📏 Lengte-artikelen (Teamcenter)")
         if length_df.empty:
