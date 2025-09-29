@@ -8,6 +8,28 @@ st.set_page_config(page_title="BOM Vergelijker", layout="wide")
 st.title("BOM Generator & Vergelijker")
 st.write("Upload een BOM CSV-bestand uit Teamcenter en een D365-exportbestand om verschillen te analyseren.")
 
+def _write_df_as_table(writer, df: pd.DataFrame, sheet_name: str):
+    """Schrijf df naar Excel als echte tabel met autofilter en nette kolombreedtes."""
+    df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=0, startcol=0)
+    workbook  = writer.book
+    worksheet = writer.sheets[sheet_name]
+    nrows, ncols = df.shape
+    if nrows == 0:
+        nrows = 1
+    last_row = nrows
+    last_col = ncols - 1
+    columns = [{"header": str(col)} for col in df.columns]
+    worksheet.add_table(0, 0, last_row, last_col, {
+        "columns": columns,
+        "name": f"T_{sheet_name.replace(' ', '_')}",
+        "style": "Table Style Medium 9",
+        "header_row": True,
+        "autofilter": True,
+    })
+    for idx, col in enumerate(df.columns):
+        max_len = max((len(str(col)),) + tuple(len(str(v)) for v in df[col].head(200).tolist()))
+        worksheet.set_column(idx, idx, min(max_len + 2, 60))
+
 # Upload Teamcenter BOM-bestand
 st.header("📤 Stap 1: Upload Teamcenter BOM-bestand")
 uploaded_file = st.file_uploader("Kies een BOM-bestand (CSV met '#' als scheidingsteken)", type=["csv"], key="teamcenter")
@@ -105,8 +127,34 @@ if uploaded_file is not None:
         if trace_item:
             for idx, (qty, path) in enumerate(trace_log[trace_item], 1):
                 st.markdown(f"**Pad {idx}: totaal {qty} stuks**")
-                path_str = " → ".join([f"{i} (×{q})" for i, q in path])
+                # Laatste element zonder (×q) tonen, tussenstappen mét (×q)
+                parts = []
+                for j, (i, q) in enumerate(path):
+                    if j == len(path) - 1:
+                        parts.append(f"{i}")
+                    else:
+                        parts.append(f"{i} (×{q})")
+                path_str = " → ".join(parts)
                 st.code(path_str)
+
+        # 📏 Lengte-artikelen (afgeleid uit result_df + template)
+        length_join = (
+            result_df
+            .merge(
+                df[['item', 'template']].drop_duplicates(),
+                how='left',
+                on='item'
+            )
+        )
+        length_df = length_join[length_join['template'].astype(str).str.contains('mm', case=False, na=False)].copy()
+        cols = [c for c in ['item', 'productname', 'total_quantity', 'template'] if c in length_df.columns]
+        length_df = length_df[cols] if len(cols) == 4 else length_df
+
+        st.subheader("📏 Lengte-artikelen (Teamcenter)")
+        if length_df.empty:
+            st.info("Geen lengte-artikelen gevonden in de bestellijst.")
+        else:
+            st.dataframe(length_df, use_container_width=True)
 
         # Vergelijking met D365
         if d365_file is not None:
@@ -141,12 +189,15 @@ if uploaded_file is not None:
 
             st.subheader("📊 Vergelijking Teamcenter vs D365")
             st.dataframe(merged[['item', 'productname_teamcenter', 'total_quantity_teamcenter',
-                                 'productname_d365', 'total_quantity_d365', 'status']], use_container_width=True)
+                                 'productname_d365', 'total_quantity_d365',
+                                 'status']], use_container_width=True)
 
-            # Downloadknop
+            # Downloadknop (alles als tabellen)
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                merged.to_excel(writer, index=False, sheet_name='Vergelijking')
+                _write_df_as_table(writer, merged, sheet_name='Vergelijking')
+                _write_df_as_table(writer, result_df, sheet_name='Bestellijst')
+                _write_df_as_table(writer, length_df, sheet_name='Lengte-artikelen')
 
             st.download_button(
                 label="📥 Download vergelijking als Excel",
